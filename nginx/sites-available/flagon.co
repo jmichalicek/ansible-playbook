@@ -1,0 +1,35 @@
+server {
+       listen 0.0.0.0:80;
+       server_name beer.bash-shell.net www.flagon.co;
+       rewrite  ^/(.*)$  http://flagon.co/$1  permanent;
+}
+
+server {
+        listen 0.0.0.0:80 default;
+        listen [::]:80;
+        server_name flagon.co;
+
+        client_max_body_size 15M;
+        client_body_buffer_size 512k;
+        access_log /var/log/nginx/flagon_access.log;
+        error_log /var/log/nginx/flagon_error.log;
+
+        location /static/ {
+            alias /home/justin/django/flagon/beerfinder/static/;
+            expires max;
+        }
+
+        location /media/ {
+            alias /home/justin/django/flagon/beerfinder/media/;
+            expires max;
+        }
+
+        location / {
+          #uwsgi_pass 127.0.0.1:11000;
+          #include uwsgi_params;
+            proxy_pass http://127.0.0.1:11000;
+            include /etc/nginx/proxy_params;
+            proxy_redirect off;
+
+        }
+}

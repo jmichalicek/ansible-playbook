@@ -1,0 +1,68 @@
+server {
+        listen 0.0.0.0:80;
+        listen [::]:80;
+        server_name bash-shell.net www.bash-shell.net test.bash-shell.net;
+        return 301 https://$host$request_uri;
+}
+
+server {
+  listen 0.0.0.0:443 ssl;
+  listen [::]:443 ssl;
+  server_name bash-shell.net www.bash-shell.net test.bash-shell.net;
+
+  ssl_certificate /etc/letsencrypt/live/bash-shell.net/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/bash-shell.net/privkey.pem;
+
+  access_log /var/log/nginx/bash_shell_net_access.log;
+  error_log /var/log/nginx/bash_shell_net_error.log;
+
+  if ($host = 'www.bash-shell.net' ) {
+    rewrite  ^/(.*)$  http://bash-shell.net/$1  permanent;
+  }
+
+  location /.well-known/acme-challenge {
+    root /var/www/bash-shell.net/;
+  }
+
+  # originally was like this... assuming it was intended to be as above
+  location /.well-known/acme-challeng {
+    root /var/www/bash-shell.net/;
+  }
+
+  location /static/ {
+    alias /home/justin/django/bash-shell.net/bash_shell_net/static_collected/;
+    expires max;
+  }
+
+  location /justin-dav/ {
+    root /var/dav/;
+    client_body_temp_path /var/dav/temp;
+    dav_methods PUT DELETE MKCOL COPY MOVE;
+    dav_ext_methods PROPFIND OPTIONS;
+    create_full_put_path on;
+    dav_access user:rw group:rw all:rw;
+    autoindex on;
+    auth_basic "restricted";
+    auth_basic_user_file /etc/nginx/webdav_htpasswd;
+  }
+
+  location /status {
+    stub_status on;
+    access_log off;
+  }
+
+  location /grafana/ {
+    include /etc/nginx/proxy_params;
+    # rewrite should not be required, but it seems to be...
+    # https://serverfault.com/questions/684709/how-to-proxy-grafana-with-nginx
+    # something with how grafana handles static urls and static root makes this
+    # rewrite required for the static files to work
+    rewrite  ^/grafana/(public.*)  /$1 break;
+    proxy_pass http://127.0.0.1:3000/;
+  }
+
+  location / {
+    include /etc/nginx/proxy_params;
+    proxy_pass http://127.0.0.1:10001;
+  }
+}

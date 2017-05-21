@@ -1,0 +1,5 @@
+
+# Look into using DigitalOcean dynamic inventory script
+# https://docs.ansible.com/ansible/intro_dynamic_inventory.html#other-inventory-scripts
+[web_servers]
+bash-shell.net ansible_become_pass="{{ blargh_become_pass }}" ansible_become_method="sudo"

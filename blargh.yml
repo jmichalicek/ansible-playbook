@@ -1,0 +1,240 @@
+- hosts: web_servers
+  vars:
+      http_port: 80
+      https_port: 443
+      # docker-py will not install properly
+      #ansible_python_interpreter: '/home/justin/.pyenv/versions/2.7.12/bin/python'
+  remote_user: justin
+  become: 'true'
+  become_method: 'sudo'
+  tasks:
+      - name: install apt_transport_https
+        apt:
+            name: "apt-transport-https"
+            state: installed
+            default_release: jessie-backports
+        tags:
+            - apt_packages
+            - debian_packages
+      - name: install standard packages
+        apt: name="{{item}}" state=installed default_release="jessie-backports"
+          # the following are needed for adding docker apt repo
+          # and for many others as well
+          # apt-transport-https. ca-certificates, curl, gnupg2, software-properties-common
+        with_items:
+            - 'build-essential'
+            - 'python-dev'
+            - 'ca-certificates'
+            - coreutils
+            - curl
+            - daemontools
+            - dnsutils
+            - git
+            - gnupg2
+            - 'vim-nox'
+            - 'pkg-config'
+            - 'software-properties-common'
+            - sudo
+            - tar
+            - telnet
+            - 'net-tools'
+            - 'python-docker'
+            - 'rsync'
+        tags:
+            - apt_packages
+            - debian_packages
+      - name: 'Add docker apt repo key'
+        apt_key:
+          keyserver: 'p80.pool.sks-keyservers.net'
+          id: '9DC858229FC7DD38854AE2D88D81803C0EBFCD88'
+        tags:
+          - apt_packages
+          - apt_keys
+          - docker
+          - docker_apt
+      - name: 'Add docker apt repo'
+        apt_repository:
+          repo: 'deb [arch=amd64] https://download.docker.com/linux/debian jessie stable'
+          state: present
+          filename: docker
+        tags:
+            - apt_packages
+            - apt_repositories
+            - docker
+            - docker_apt
+      - name: 'Install docker from apt repo'
+        apt:
+            name: 'docker-ce=17.03.0~ce-0~debian-jessie'
+            state: present
+        tags:
+            - apt_packages
+            - apt_repositories
+            - docker
+            - docker_apt
+    # cannot start it without a password - then it still does not stay started
+    #   - name: ensure rsyncd is running
+    #     service:
+    #         name: rsync
+    #         state: started
+    #         enabled: yes
+        # tags:
+        #     - rsync
+      - name: ensure docker is running
+        service: name=docker state=started enabled=yes
+        tags:
+            - docker
+            - docker_start
+      - name: installs docker-compose
+        pip:
+          name: 'docker-compose'
+          state: present
+        tags:
+            - docker
+            - docker_compose
+      # docker containers for stats collection/monitoring
+      # currently set up for basic docker compose with all 3
+      # services on same host.  In future, it may make sense
+      # to split grafana and influxdb out and keep telefraf local per machine
+      - name: creates docker compose files dir
+        file:
+            path: /opt/docker
+            state: directory
+      - name: copies docker compose configs
+        # it's unclear in the docs, but you need to copy compose.yml files, etc
+        # to the server first
+        copy:
+            src: ./docker/
+            dest: /opt/docker
+        tags:
+            - docker
+            - docker_compose
+            - docker_compose_mkdirs
+            - docker_compose_copy
+      - name: pull grafana image
+        docker_image:
+            name: "grafana/grafana"
+            tag: "4.2.0"
+            state: present
+        tags:
+            - docker
+            - docker_images
+            - docker_grafana_image
+            - docker_stats_images
+            - docker_stats_stack
+      - name: pull influxdb image
+        docker_image:
+            name: "influxdb"
+            tag: "1.2.4"
+            state: present
+        tags:
+            - docker
+            - docker_images
+            - docker_influxdb_image
+            - docker_stats_images
+            - docker_stats_stack
+      - name: 'pull telegraf image'
+        docker_image:
+            name: "telegraf"
+            tag: "1.3"
+            state: present
+        tags:
+            - docker
+            - docker_images
+            - docker_telegraf_image
+            - docker_stats_images
+            - docker_stats_stack
+      - name: start stats compose stack
+        environment:
+            GF_SECURITY_ADMIN_PASSWORD: "{{ gf_security_admin_password }}"
+            GF_SECURITY_ADMIN_USER: "{{ gf_security_admin_user }}"
+            INFLUXDB_TELEGRAF_USERNAME: "{{ influxdb_telegraf_username }}"
+            INFLUXDB_TELEGRAF_PASSWORD: "{{ influxdb_telegraf_password }}"
+        docker_service:
+            project_name: docker_stats
+            project_src: /opt/docker/
+            files:
+                - compose-stats.yml
+        tags:
+            - docker
+            - docker_run_containers
+            - docker_stats_containers_start
+            - docker_stats_stack
+            - docker_compose
+      - name: 'installs nginx-extras from apt'
+        apt:
+            name: 'nginx-extras'
+            state: 'installed'
+            default_release: jessie-backports
+        tags:
+            - nginx
+            - apt_packages
+            - nginx_install
+      - name: 'copies bash-shell.net nginx config to server'
+        copy:
+          src: './nginx/sites-available/bash-shell.net'
+          dest: '/etc/nginx/sites-available/bash-shell.net'
+          owner: root
+          group: root
+          mode: 0644
+        tags:
+          - nginx
+          - nginx_config
+          - nginx_bash_shell_net
+      - name: 'create bash-shell.net in sites-enabled'
+        file:
+            src: '/etc/nginx/sites-available/bash-shell.net'
+            dest: '/etc/nginx/sites-enabled/001-bash-shell.net'
+            state: link
+            owner: root
+            group: root
+        notify:
+            - reload nginx
+        tags:
+          - nginx
+          - nginx_config
+          - nginx_bash_shell_net
+      - name: 'copies flagon.co nginx config to server'
+        copy:
+          src: './nginx/sites-available/flagon.co'
+          dest: '/etc/nginx/sites-available/flagon.co'
+          owner: root
+          group: root
+          mode: 0644
+        tags:
+          - nginx
+          - nginx_config
+          - nginx_flagon_co
+      - name: 'create flagon.co in sites-enabled'
+        file:
+            src: '/etc/nginx/sites-available/flagon.co'
+            dest: '/etc/nginx/sites-enabled/002-flagon.co'
+            state: link
+            owner: root
+            group: root
+        notify:
+            - reload nginx
+        tags:
+          - nginx
+          - nginx_config
+          - nginx_flagon_co
+      - name: 'ensure nginx is started'
+        service:
+          name: 'nginx'
+          state: started
+          enabled: yes
+  handlers:
+      - name: start docker
+        service: name=docker state=started
+      - name: reload nginx
+        service: name=nginx state=reloaded
+
+    # todo, postgres, create users, letsencrypt, openvpn
+
+    #   - name: install nginx from apt
+    #     apt:
+    #         name: nginx
+    #         state: installed
+    #   - name: copy bs-net config
+    #     template:
+    #         src: nginx/sites-available/bash-shell.net
+    #         dest: /etc/nginx/sites-available/bash-shell.net

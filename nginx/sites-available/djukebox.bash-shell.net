@@ -1,0 +1,49 @@
+server {
+    listen 80;
+    server_name djukebox.bash-shell.net;
+
+    client_max_body_size 15M;
+    client_body_buffer_size 512k;
+
+
+    location /static/ {
+        alias /home/justin/django/djukebox_static/;
+#        alias /home/justin/django/js/static_files/;
+    }
+
+    location /media/ {
+        alias /home/justin/django/djukebox_media/;
+        expires -1;
+    }
+
+    # use x-accel-buffering "no" header in the response for long polling to uwsgi
+    # or set uwsgi_buffering to off
+    #http://serverfault.com/a/317220
+    # for long poll against built in runserver set proxy_buffering to off
+    # http://serverfault.com/a/296965
+
+    proxy_set_header Host $host;
+    location /justin-dav/ {
+  root /var/dav;
+  client_body_temp_path /var/dav/temp;
+  dav_methods PUT DELETE MKCOL COPY MOVE;
+  dav_ext_methods PROPFIND OPTIONS;
+  create_full_put_path on;
+  dav_access user:rw group:rw all:rw;
+  autoindex on;
+  auth_basic "restricted";
+  auth_basic_user_file /etc/nginx/webdav_htpasswd;
+}
+
+location / {
+    if (-f $request_filename) {
+       add_header X-Static hit;
+       access_log   off;
+    }
+
+    if (!-f $request_filename) {
+      proxy_pass http://127.0.0.1:8000;
+      expires -1;
+    }
+}
+}
