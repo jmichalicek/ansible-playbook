@@ -29,3 +29,4 @@
 * Deploy new instances and create the user
 * Server inventory dynamically from Digital Ocean
 * More paths as variables
+* Add my grafana dashboards json to this to make it easy to set back up?
