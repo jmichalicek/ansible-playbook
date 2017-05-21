@@ -25,6 +25,7 @@
             - 'build-essential'
             - 'python-dev'
             - 'ca-certificates'
+            - certbot
             - coreutils
             - curl
             - daemontools
