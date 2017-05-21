@@ -223,6 +223,43 @@
           name: 'nginx'
           state: started
           enabled: yes
+      - name: 'set shell environment for certbot cron'
+        cron:
+          name: SHELL
+          env: yes
+          value: /bin/sh
+          user: root
+          cron_file: certbot
+          state: present
+        tags:
+          - certbot
+          - letsencrypt
+          - nginx
+      - name: 'set path environment for certbot cron'
+        cron:
+          name: PATH
+          env: yes
+          value: '/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin'
+          user: root
+          cron_file: certbot
+          state: present
+        tags:
+          - certbot
+          - letsencrypt
+          - nginx
+      - name: 'ensure certbot letsencrypt renew cron job'
+        cron:
+          name: "certbot update"
+          minute: "0"
+          hour: "*/12"
+          user: root
+          job: "test -x /usr/bin/certbot -a \\! -d /run/systemd/system && perl -e 'sleep int(rand(3600))' && certbot -q renew && systemctl reload nginx"
+          cron_file: certbot
+          state: present
+        tags:
+          - certbot
+          - letsencrypt
+          - nginx
   handlers:
       - name: start docker
         service: name=docker state=started
