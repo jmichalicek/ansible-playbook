@@ -1,12 +1,15 @@
 version: "3"
 services:
     telegraf:
+        # TODO: watch for telegraf 1.4 which will fix monitoring host process and net count
+        # from within docker container
         image: telegraf:1.3
         ports:
             - "8125:8125/udp"
         # environment variables and volumes below to
         # allow telegraf in the container to report the host cpu, mem, etc
         environment:
+          # TODO: Do these do anything now that HOST_MOUNT_PREFIX is used?
           HOST_PROC: /rootfs/proc
           HOST_SYS: /rootfs/sys
           HOST_ETC: /rootfs/etc
@@ -18,13 +21,16 @@ services:
         # I think this for the stats to show how I want in influxdb?
         # it is not true, but it makes stats show as desired in grafana and influxdb
         # maybe there's a better way
-        hostname: blargh
+        hostname: telegraf
         volumes:
             - ./stats/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
             - /var/run/docker.sock:/var/run/docker.sock:ro
-            - /sys:/rootfs/sys:ro
-            - /proc:/rootfs/proc:ro
-            - /etc:/rootfs/etc:ro
+            # mount host root according to
+            # https://github.com/influxdata/telegraf/blob/master/plugins/inputs/system/DISK_README.md
+            - /:/rootfs:ro
+            # - /sys:/rootfs/sys:ro
+            # - /proc:/rootfs/proc:ro
+            # - /etc:/rootfs/etc:ro
     influxdb:
         # influxdb docker config at https://hub.docker.com/_/influxdb/
         image: "influxdb:1.2.4"
