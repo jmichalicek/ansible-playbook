@@ -5,7 +5,7 @@ services:
         # from within docker container
         image: telegraf:1.3
         ports:
-            - "8125:8125/udp"
+            - "127.0.0.1:8125:8125/udp"
         # environment variables and volumes below to
         # allow telegraf in the container to report the host cpu, mem, etc
         environment:
@@ -41,9 +41,9 @@ services:
         volumes:
             - /opt/docker/volumes/influxdb:/var/lib/influxdb
         ports:
-            - 8086:8086
-            - 2003:2003
-            - 8083:8083
+            - 127.0.0.1:8086:8086
+            - 127.0.0.1:2003:2003
+            - 127.0.0.1:8083:8083
         privileged: false
         links:
             - telegraf
@@ -58,7 +58,7 @@ services:
             - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
             - GF_USERS_ALLOW_SIGN_UP=false
         ports:
-            - 3000:3000
+            - 127.0.0.1:3000:3000
         volumes:
             # TODO: permissions/ownership for these volues on the host is mucked up
             # because of how docker volumes work... see if I can make these make sense
