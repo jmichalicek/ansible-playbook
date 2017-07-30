@@ -10,7 +10,7 @@
   * gf_security_admin_user
   * influxdb_telegraf_username
   * influxdb_telegraf_password
-* Run `ansible-playbook blargh.yml -i ./inventory -u <remote_user>--extra-vars @secrets.yml --ask-vault-pass`
+* Run `ansible-playbook blargh.yml -i ./inventory -u <remote_user> --extra-vars @secrets.yml --ask-vault-pass`
 
 ## Assumptions
 
@@ -27,6 +27,10 @@
 * Install the rest of my base packages
 * Set up host groups and tasks lists a bit better
 * Deploy new instances and create the user
+* Add user configs - ssh keys, .bashrc, .bash_profile, .vimrc, etc.ideally dynamically
+  see https://github.com/gbirke/ansible-create-users/blob/master/create_users_example.yml#L8 for users
+  from vault file
+  * install vim plug  for my user https://github.com/junegunn/vim-plug#vim
 * Server inventory dynamically from Digital Ocean
 * More paths as variables
 * Add my grafana dashboards json to this to make it easy to set back up?
