@@ -1,0 +1,29 @@
+version: "3"
+services:
+    django:
+        image: "bash-shell-net:master"
+        #build:
+        #    context: ${BUILD_CONTEXT:-..}
+        #    dockerfile: ${DOCKERFILE:-"docker/Dockerfile.dev"}
+        #    args:
+        #        - PYTHON_VERSION=${PYTHON_VERSION:-3.6.2}
+        #        - SHELL=/bin/bash
+        stdin_open: true
+        tty: true
+        ports:
+            - "8000:8002"
+        volumes:
+            - ${STATIC_FILES_DIR:-static_collected/}:/home/django/bash-shell.net/static_collected
+        env_file:
+            - .env
+        environment:
+            - DOCKER_SERVER
+            - PYTHON_VERSION=3.6.2
+            - SHELL=/bin/bash
+            - DJANGO_SETTINGS_MODULE
+            - DATABASE_URL
+            - STATIC_ROOT
+            - MEDIA_ROOT
+        command: bash -c '/home/django/.pyenv/versions/bash-shell-net/bin/gunicorn --workers 2 --bind 0.0.0.0:8000 --name django --max-requests=1000 bash_shell_net.wsgi:application'
+volumes:
+    static_files:
