@@ -13,11 +13,9 @@ services:
         ports:
             - "8000:8002"
         volumes:
-            - ${STATIC_FILES_DIR:-static_collected/}:/home/django/bash-shell.net/static_collected
-        env_file:
-            - .env
+            - ${STATIC_FILES_DIR:-static_files}:/home/django/bash-shell.net/static_collected
         environment:
-            - DOCKER_SERVER
+            - DOCKER_HOST_ADDR
             - PYTHON_VERSION=3.6.2
             - SHELL=/bin/bash
             - DJANGO_SETTINGS_MODULE
@@ -25,5 +23,7 @@ services:
             - STATIC_ROOT
             - MEDIA_ROOT
         command: bash -c '/home/django/.pyenv/versions/bash-shell-net/bin/gunicorn --workers 2 --bind 0.0.0.0:8000 --name django --max-requests=1000 bash_shell_net.wsgi:application'
+        extra_hosts:
+            - "database:$DOCKER_HOST_ADDR"
 volumes:
     static_files:

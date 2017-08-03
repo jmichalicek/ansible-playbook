@@ -80,6 +80,15 @@
     #         enabled: yes
         # tags:
         #     - rsync
+      - name: adds etc docker daemon config
+        template:
+            src: ./templates/etc/docker/daemon.json.j2
+            dest: /etc/docker/daemon.json
+            owner: root
+            group: root
+            mode: 0644
+        tags:
+            - docker
       - name: ensure docker is running
         service: name=docker state=started enabled=yes
         tags:
@@ -92,6 +101,22 @@
         tags:
             - docker
             - docker_compose
+      - name: 'adds docker environment variables globally to profile'
+        copy:
+            src: ./files/etc/profile.d/docker.sh
+            dest: /etc/profile.d/docker.sh
+            mode: 0755
+            owner: root
+            group: root
+        tags:
+            - docker
+            - docker_environment
+    #   - name: 'adds docker enviornment variables globally to bashrc'
+    #     lineinfile:
+    #         path: /etc/bash.bashrc
+    #         regexp: '^export DOCKER0_HOST_ADDR'
+    #         line: 'export DOCKER0_HOST_ADDR={{ docker0_bridge_ip }}'
+
       # docker containers for stats collection/monitoring
       # currently set up for basic docker compose with all 3
       # services on same host.  In future, it may make sense
@@ -150,6 +175,7 @@
             GF_SECURITY_ADMIN_USER: "{{ gf_security_admin_user }}"
             INFLUXDB_TELEGRAF_USERNAME: "{{ influxdb_telegraf_username }}"
             INFLUXDB_TELEGRAF_PASSWORD: "{{ influxdb_telegraf_password }}"
+            DOCKER_HOST_ADDR: "{{ docker0_bridge_ip }}"
         docker_service:
             project_name: docker_stats
             project_src: /opt/docker/
@@ -160,6 +186,25 @@
             - docker_run_containers
             - docker_stats_containers_start
             - docker_stats_stack
+            - docker_compose
+      - name: starts blog compose stack
+        environment:
+            DOCKER_HOST_ADDR: "{{ docker0_bridge_ip }}"
+            STATIC_FILES_DIR: "/opt/docker/volumes/blog/"
+            DJANGO_SETTINGS_MODULE: "bash_shell_net.settings.production"
+            STATIC_ROOT: "/home/django/bash-shell.net/static_collected/"
+            MEDIA_ROOT: "/home/django/bash-shell.net/media/"
+            DATABASE_URL: "postgres://{{ blog_db_user }}:{{ blog_db_password }}@database/{{ blog_db_name }}"
+        docker_service:
+            project_name: docker_blog
+            project_src: /opt/docker/
+            files:
+                - compose-blog.yml
+        tags:
+            - docker
+            - docker_run_containers
+            - docker_blog_containers_start
+            - docker_blog_stack
             - docker_compose
       - name: 'installs nginx-extras from apt'
         apt:

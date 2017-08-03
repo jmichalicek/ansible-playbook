@@ -31,6 +31,8 @@ services:
             # - /sys:/rootfs/sys:ro
             # - /proc:/rootfs/proc:ro
             # - /etc:/rootfs/etc:ro
+        extra_hosts:
+            - "bash-shell.net:$DOCKER_HOST_ADDR"
     influxdb:
         # influxdb docker config at https://hub.docker.com/_/influxdb/
         image: "influxdb:1.2.4"
@@ -47,6 +49,8 @@ services:
         privileged: false
         links:
             - telegraf
+        extra_hosts:
+            - "bash-shell.net:$DOCKER_HOST_ADDR"
     grafana:
         image: "grafana/grafana:4.2.0"
         hostname: grafana
@@ -65,5 +69,7 @@ services:
             # - ./stats/grafana/etc:/etc/grafana
             - /opt/docker/volumes/grafana/lib:/var/lib/grafana
             - /opt/docker/volumes/grafana/log:/var/log/grafana
+        extra_hosts:
+            - "bash-shell.net:$DOCKER_HOST_ADDR"
 volumes:
     influxdb:
