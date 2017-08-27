@@ -1,7 +1,7 @@
 version: "3"
 services:
     django:
-        image: "bash-shell-net:20170827_024457"
+        image: "registry.gitlab.com/jmichalicek/bash-shell.net:20170827_033036"
         #build:
         #    context: ${BUILD_CONTEXT:-..}
         #    dockerfile: ${DOCKERFILE:-"docker/Dockerfile.dev"}
