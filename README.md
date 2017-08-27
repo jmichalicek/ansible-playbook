@@ -11,6 +11,7 @@
   * influxdb_telegraf_username
   * influxdb_telegraf_password
 * Run `ansible-playbook blargh.yml -i ./inventory -u <remote_user> --extra-vars @secrets.yml --ask-vault-pass`
+* To see facts `ansible web_servers -m setup -i ./inventory -u root --extra-vars @secrets.yml --ask-vault-pass`
 
 ## Assumptions
 

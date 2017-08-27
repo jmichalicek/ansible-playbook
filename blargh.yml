@@ -1,323 +1,479 @@
 - hosts: web_servers
   vars:
-      http_port: 80
-      https_port: 443
-      # docker-py will not install properly
-      #ansible_python_interpreter: '/home/justin/.pyenv/versions/2.7.12/bin/python'
-  remote_user: justin
-  become: 'true'
-  become_method: 'sudo'
+    http_port: 80
+    https_port: 443
+    # docker-py will not install properly
+    #ansible_python_interpreter: '/home/justin/.pyenv/versions/2.7.12/bin/python'
+  remote_user: root
+  #become: 'true'
+  #become_method: 'sudo'
   tasks:
-      - name: install apt_transport_https
-        apt:
-            name: "apt-transport-https"
-            state: installed
-            default_release: jessie-backports
-        tags:
-            - apt_packages
-            - debian_packages
-      - name: install standard packages
-        apt: name="{{item}}" state=installed default_release="jessie-backports"
-          # the following are needed for adding docker apt repo
-          # and for many others as well
-          # apt-transport-https. ca-certificates, curl, gnupg2, software-properties-common
-        with_items:
-            - 'build-essential'
-            - 'python-dev'
-            - 'ca-certificates'
-            - certbot
-            - coreutils
-            - curl
-            - daemontools
-            - dnsutils
-            - git
-            - gnupg2
-            - 'vim-nox'
-            - 'pkg-config'
-            - 'software-properties-common'
-            - sudo
-            - tar
-            - telnet
-            - 'net-tools'
-            - 'python-docker'
-            - 'rsync'
-        tags:
-            - apt_packages
-            - debian_packages
-      - name: 'Add docker apt repo key'
-        apt_key:
-          keyserver: 'p80.pool.sks-keyservers.net'
-          id: '9DC858229FC7DD38854AE2D88D81803C0EBFCD88'
-        tags:
-          - apt_packages
-          - apt_keys
-          - docker
-          - docker_apt
-      - name: 'Add docker apt repo'
-        apt_repository:
-          repo: 'deb [arch=amd64] https://download.docker.com/linux/debian jessie stable'
-          state: present
-          filename: docker
-        tags:
-            - apt_packages
-            - apt_repositories
-            - docker
-            - docker_apt
-      - name: 'Install docker from apt repo'
-        apt:
-            name: 'docker-ce=17.03.0~ce-0~debian-jessie'
-            state: present
-        tags:
-            - apt_packages
-            - apt_repositories
-            - docker
-            - docker_apt
-    # cannot start it without a password - then it still does not stay started
-    #   - name: ensure rsyncd is running
-    #     service:
-    #         name: rsync
-    #         state: started
-    #         enabled: yes
-        # tags:
-        #     - rsync
-      - name: adds etc docker daemon config
-        template:
-            src: ./templates/etc/docker/daemon.json.j2
-            dest: /etc/docker/daemon.json
-            owner: root
-            group: root
-            mode: 0644
-        tags:
-            - docker
-      - name: ensure docker is running
-        service: name=docker state=started enabled=yes
-        tags:
-            - docker
-            - docker_start
-      - name: installs docker-compose
-        pip:
-          name: 'docker-compose'
-          state: present
-        tags:
-            - docker
-            - docker_compose
-      - name: 'adds docker environment variables globally to profile'
-        copy:
-            src: ./files/etc/profile.d/docker.sh
-            dest: /etc/profile.d/docker.sh
-            mode: 0755
-            owner: root
-            group: root
-        tags:
-            - docker
-            - docker_environment
-    #   - name: 'adds docker enviornment variables globally to bashrc'
-    #     lineinfile:
-    #         path: /etc/bash.bashrc
-    #         regexp: '^export DOCKER0_HOST_ADDR'
-    #         line: 'export DOCKER0_HOST_ADDR={{ docker0_bridge_ip }}'
-
-      # docker containers for stats collection/monitoring
-      # currently set up for basic docker compose with all 3
-      # services on same host.  In future, it may make sense
-      # to split grafana and influxdb out and keep telefraf local per machine
-      - name: creates docker compose files dir
-        file:
-            path: /opt/docker
-            state: directory
-      - name: copies docker compose configs
-        # it's unclear in the docs, but you need to copy compose.yml files, etc
-        # to the server first
-        copy:
-            src: ./docker/
-            dest: /opt/docker
-        tags:
-            - docker
-            - docker_compose
-            - docker_compose_mkdirs
-            - docker_compose_copy
-      - name: pull grafana image
-        docker_image:
-            name: "grafana/grafana"
-            tag: "4.2.0"
-            state: present
-        tags:
-            - docker
-            - docker_images
-            - docker_grafana_image
-            - docker_stats_images
-            - docker_stats_stack
-      - name: pull influxdb image
-        docker_image:
-            name: "influxdb"
-            tag: "1.2.4"
-            state: present
-        tags:
-            - docker
-            - docker_images
-            - docker_influxdb_image
-            - docker_stats_images
-            - docker_stats_stack
-      - name: 'pull telegraf image'
-        docker_image:
-            name: "telegraf"
-            tag: "1.3"
-            state: present
-        tags:
-            - docker
-            - docker_images
-            - docker_telegraf_image
-            - docker_stats_images
-            - docker_stats_stack
-      - name: start stats compose stack
-        environment:
-            GF_SECURITY_ADMIN_PASSWORD: "{{ gf_security_admin_password }}"
-            GF_SECURITY_ADMIN_USER: "{{ gf_security_admin_user }}"
-            INFLUXDB_TELEGRAF_USERNAME: "{{ influxdb_telegraf_username }}"
-            INFLUXDB_TELEGRAF_PASSWORD: "{{ influxdb_telegraf_password }}"
-            DOCKER_HOST_ADDR: "{{ docker0_bridge_ip }}"
-        docker_service:
-            project_name: docker_stats
-            project_src: /opt/docker/
-            files:
-                - compose-stats.yml
-        tags:
-            - docker
-            - docker_run_containers
-            - docker_stats_containers_start
-            - docker_stats_stack
-            - docker_compose
-      - name: starts blog compose stack
-        environment:
-            DOCKER_HOST_ADDR: "{{ docker0_bridge_ip }}"
-            STATIC_FILES_DIR: "/opt/docker/volumes/blog/"
-            DJANGO_SETTINGS_MODULE: "bash_shell_net.settings.production"
-            STATIC_ROOT: "/home/django/bash-shell.net/static_collected/"
-            MEDIA_ROOT: "/home/django/bash-shell.net/media/"
-            DATABASE_URL: "postgres://{{ blog_db_user }}:{{ blog_db_password }}@database/{{ blog_db_name }}"
-        docker_service:
-            project_name: docker_blog
-            project_src: /opt/docker/
-            files:
-                - compose-blog.yml
-        tags:
-            - docker
-            - docker_run_containers
-            - docker_blog_containers_start
-            - docker_blog_stack
-            - docker_compose
-      - name: 'installs nginx-extras from apt'
-        apt:
-            name: 'nginx-extras'
-            state: 'installed'
-            default_release: jessie-backports
-        tags:
-            - nginx
-            - apt_packages
-            - nginx_install
-      - name: 'copies bash-shell.net nginx config to server'
-        copy:
-          src: './nginx/sites-available/bash-shell.net'
-          dest: '/etc/nginx/sites-available/bash-shell.net'
-          owner: root
-          group: root
-          mode: 0644
-        tags:
-          - nginx
-          - nginx_config
-          - nginx_bash_shell_net
-      - name: 'create bash-shell.net in sites-enabled'
-        file:
-            src: '/etc/nginx/sites-available/bash-shell.net'
-            dest: '/etc/nginx/sites-enabled/001-bash-shell.net'
-            state: link
-            owner: root
-            group: root
-        notify:
-            - reload nginx
-        tags:
-          - nginx
-          - nginx_config
-          - nginx_bash_shell_net
-      - name: 'copies flagon.co nginx config to server'
-        copy:
-          src: './nginx/sites-available/flagon.co'
-          dest: '/etc/nginx/sites-available/flagon.co'
-          owner: root
-          group: root
-          mode: 0644
-        tags:
-          - nginx
-          - nginx_config
-          - nginx_flagon_co
-      - name: 'create flagon.co in sites-enabled'
-        file:
-            src: '/etc/nginx/sites-available/flagon.co'
-            dest: '/etc/nginx/sites-enabled/002-flagon.co'
-            state: link
-            owner: root
-            group: root
-        notify:
-            - reload nginx
-        tags:
-          - nginx
-          - nginx_config
-          - nginx_flagon_co
-      - name: 'ensure nginx is started'
-        service:
-          name: 'nginx'
-          state: started
-          enabled: yes
-      - name: 'set shell environment for certbot cron'
-        cron:
-          name: SHELL
-          env: yes
-          value: /bin/sh
-          user: root
-          cron_file: certbot
-          state: present
-        tags:
-          - certbot
-          - letsencrypt
-          - nginx
-      - name: 'set path environment for certbot cron'
-        cron:
-          name: PATH
-          env: yes
-          value: '/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin'
-          user: root
-          cron_file: certbot
-          state: present
-        tags:
-          - certbot
-          - letsencrypt
-          - nginx
-      - name: 'ensure certbot letsencrypt renew cron job'
-        cron:
-          name: "certbot update"
-          minute: "0"
-          hour: "*/12"
-          user: root
-          job: "test -x /usr/bin/certbot -a \\! -d /run/systemd/system && perl -e 'sleep int(rand(3600))' && certbot -q renew && systemctl reload nginx"
-          cron_file: certbot
-          state: present
-        tags:
-          - certbot
-          - letsencrypt
-          - nginx
+    - name: install apt_transport_https
+      apt:
+        name: "apt-transport-https"
+        state: installed
+        default_release: jessie-backports
+      tags:
+        - apt_packages
+        - debian_packages
+    - name: install standard packages
+      apt: name="{{item}}" state=installed default_release="jessie-backports"
+        # the following are needed for adding docker apt repo
+        # and for many others as well
+        # apt-transport-https. ca-certificates, curl, gnupg2, software-properties-common
+      with_items:
+        - aptitude
+        - 'ca-certificates'
+        - certbot
+        - coreutils
+        - curl
+        - daemontools
+        - dnsutils
+        - git
+        - gnupg2
+        - 'vim-nox'
+        - 'pkg-config'
+        - 'software-properties-common'
+        - sudo
+        - tar
+        - telnet
+        - 'net-tools'
+        - 'python-docker'
+        - 'rsync'
+        - 'net-tools'
+        - 'openssh-server'
+        - 'openssh-client'
+        - 'ntp'
+        - 'iptables'
+        - wget
+      tags:
+        - apt_packages
+        - debian_packages
+    - name: 'Install common dev libs'
+      apt: name="{{item}}" state="installed" default_release="jessie-backports"
+      with_items:
+        - 'build-essential'
+        - 'python-dev'
+        - 'postgresql-server-dev-9.6'
+        - 'zlib1g-dev'
+        - 'libpq-dev'
+        - 'libssl-dev'
+        - 'libjpeg-dev'
+        - 'libffi-dev'
+        - 'libsqlite3-dev'
+        - 'libreadline-dev'
+        - 'automake'
+        - 'autoconf'
+        - 'sqlite3'
+      tags:
+        - apt_packages
+        - install_devtools
+    - name: 'Installs irssi'
+      apt: name="{{item}}" state="installed" default_release="jessie-backports"
+      with_items:
+        - irssi
+      tags:
+        - apt_packages
+        - install_irssi
+    - name: 'Installs redis'
+      apt: name="{{item}}" state="installed" default_release="jessie-backports"
+      with_items:
+        - 'redis-server'
+        - 'redis-tools'
+      tags:
+        - apt_packages
+        - install_redis
+    - name: 'Create redis.conf'
+      # hard coded to specific version used at the moment
+      template:
+        src: ./templates/redis/redis.conf.j2
+        dest: /etc/redis/redis.conf
+        owner: redis
+        group: redis
+        mode: 0640
+      tags:
+        - 'redis-server'
+        - 'redis-config'
+    - name: 'Restarts redis server after config updates'
+      service:
+        name: 'redis-server'
+        state: restarted
+        enabled: yes
+      tags:
+        - 'redis-server'
+        - 'redis-config'
+        - 'restart-redis'
+    - name: 'Install postgresql server'
+      apt: name="{{item}}" state=installed default_release="jessie-backports"
+      with_items:
+        - 'postgresql-9.6'
+      tags:
+        - apt_packages
+        - install_postgres
+        - install_pgserver
+    - name: 'Install postgresql client'
+      apt: name="{{item}}" state=installed default_release="jessie-backports"
+      with_items:
+        - 'postgresql-client-9.6'
+      tags:
+        - apt_packages
+        - install_postgres
+        - install_pgclient
+    - name: 'Create postgresql.conf'
+      # hard coded to specific version used at the moment
+      template:
+        src: ./templates/postgresql/postgresql.conf.j2
+        dest: /etc/postgresql/9.6/main/postgresql.conf
+        owner: postgres
+        group: postgres
+        mode: 0644
+      tags:
+        - 'postgresql-server'
+        - 'postgresql-config'
+    - name: 'Create pg_hba.conf'
+      # hard coded to specific version used at the moment
+      template:
+        src: ./templates/postgresql/pg_hba.conf.j2
+        dest: /etc/postgresql/9.6/main/pg_hba.conf
+        owner: postgres
+        group: postgres
+        mode: 0640
+      tags:
+        - 'postgresql-server'
+        - 'postgresql-config'
+    - name: 'Restarts postgres server after config updates'
+      service:
+        name: postgresql
+        state: restarted
+        enabled: yes
+      tags:
+        - 'postgresql-server'
+        - 'postgresql-config'
+        - 'restart-postgresql'
+    - name: 'Add erlang/elixir apt repo'
+      apt_repository:
+        repo: 'deb [arch=amd64] https://packages.erlang-solutions.com/debian jessie contrib'
+        state: present
+        filename: docker
+        update_cache: no
+      tags:
+        - apt_packages
+        - apt_repositories
+        - elxiir
+        - elixir_apt
+    - name: 'Add erlang/elixir apt repo key'
+      apt_key:
+        url: 'https://packages.erlang-solutions.com/debian/erlang_solutions.asc'
+        #keyserver: 'packages.erlang-solutions.com'
+        # id: '9DC858229FC7DD38854AE2D88D81803C0EBFCD88'
+        state: present
+      tags:
+        - apt_packages
+        - apt_keys
+        - elxiir
+        - elixir_apt
+    - name: 'Add docker apt repo key'
+      apt_key:
+        keyserver: 'p80.pool.sks-keyservers.net'
+        id: '9DC858229FC7DD38854AE2D88D81803C0EBFCD88'
+      tags:
+        - apt_packages
+        - apt_keys
+        - docker
+        - docker_apt
+    - name: 'Add docker apt repo'
+      apt_repository:
+        repo: 'deb [arch=amd64] https://download.docker.com/linux/debian jessie stable'
+        state: present
+        filename: docker
+        update_cache: no
+      tags:
+        - apt_packages
+        - apt_repositories
+        - docker
+        - docker_apt
+    - name: Set erlang-solutions to higher priority
+      copy:
+        src: ./files/erlang-apt-pin
+        dest: /etc/apt/preferences.d/erlang
+        mode: 0644
+        owner: root
+        group: root
+      tags:
+        - apt_packages
+        - apt_keys
+        - elxiir
+        - elixir_apt
+    - name: 'updates apt cache after adding extra repos'
+      apt:
+        update_cache: yes
+    - name: 'Install elixir and erlang from apt'
+      apt: name="{{item}}" state="installed"
+      with_items:
+        - esl-erlang
+        - elixir
+      tags:
+        - apt_packages
+        - apt_repositories
+        - elixir
+        - install_elixir
+    - name: 'Install docker from apt repo'
+      apt:
+        name: 'docker-ce=17.06.1~ce-0~debian'
+        state: present
+      tags:
+        - apt_packages
+        - apt_repositories
+        - docker
+        - docker_apt
+  # cannot start it without a password - then it still does not stay started
+  #   - name: ensure rsyncd is running
+  #     service:
+  #         name: rsync
+  #         state: started
+  #         enabled: yes
+      # tags:
+      #     - rsync
+    - name: adds etc docker daemon config
+      template:
+        src: ./templates/etc/docker/daemon.json.j2
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: 0644
+      tags:
+        - docker
+    - name: ensure docker is running
+      service: name=docker state=started enabled=yes
+      tags:
+        - docker
+        - docker_start
+    - name: installs docker-compose
+      pip:
+        name: 'docker-compose'
+        state: present
+      tags:
+        - docker
+        - docker_compose
+    - name: 'adds docker environment variables globally to profile'
+      copy:
+        src: ./files/etc/profile.d/docker.sh
+        dest: /etc/profile.d/docker.sh
+        mode: 0755
+        owner: root
+        group: root
+      tags:
+        - docker
+        - docker_environment
+    # docker containers for stats collection/monitoring
+    # currently set up for basic docker compose with all 3
+    # services on same host.  In future, it may make sense
+    # to split grafana and influxdb out and keep telefraf local per machine
+    - name: creates docker compose files dir
+      file:
+        path: /opt/docker
+        state: directory
+    - name: copies docker compose configs
+      # it's unclear in the docs, but you need to copy compose.yml files, etc
+      # to the server first
+      # TODO: copy the configs for each stack separately for easier single stack updates
+      copy:
+        src: ./docker/
+        dest: /opt/docker
+      tags:
+        - docker
+        - docker_compose
+        - docker_compose_mkdirs
+        - docker_compose_copy
+    - name: pull grafana image
+      docker_image:
+        name: "grafana/grafana"
+        tag: "4.2.0"
+        state: present
+      tags:
+        - docker
+        - docker_images
+        - docker_grafana_image
+        - docker_stats_images
+        - deploy_stats
+        - deploy_grafana
+    - name: pull influxdb image
+      docker_image:
+        name: "influxdb"
+        tag: "1.2.4"
+        state: present
+      tags:
+        - docker
+        - docker_images
+        - docker_influxdb_image
+        - docker_stats_images
+        - deploy_stats
+        - deploy_influxdb
+    - name: 'pull telegraf image'
+      docker_image:
+        name: "telegraf"
+        tag: "1.3"
+        state: present
+      tags:
+        - docker
+        - docker_images
+        - docker_telegraf_image
+        - docker_stats_images
+        - deploy_stats
+        - deploy_telegraf
+    - name: start stats compose stack
+      environment:
+        GF_SECURITY_ADMIN_PASSWORD: "{{ gf_security_admin_password }}"
+        GF_SECURITY_ADMIN_USER: "{{ gf_security_admin_user }}"
+        INFLUXDB_TELEGRAF_USERNAME: "{{ influxdb_telegraf_username }}"
+        INFLUXDB_TELEGRAF_PASSWORD: "{{ influxdb_telegraf_password }}"
+        DOCKER_HOST_ADDR: "{{ docker0_bridge_ip }}"
+      docker_service:
+        project_name: docker_stats
+        project_src: /opt/docker/
+        files:
+          - compose-stats.yml
+      tags:
+        - docker
+        - docker_run_containers
+        - docker_stats_containers_start
+        - deploy_stats
+        - docker_compose
+    - name: starts blog compose stack
+      # TODO: Make compose-blog.yml a jinja2 template and set the deployed version there.
+      environment:
+        DOCKER_HOST_ADDR: "{{ ansible_eth1.ipv4.address }}"
+        STATIC_FILES_DIR: "/opt/docker/volumes/blog/static"
+        DJANGO_SETTINGS_MODULE: "bash_shell_net.settings.production"
+        STATIC_ROOT: "/home/django/bash-shell.net/static_collected/"
+        MEDIA_ROOT: "/home/django/bash-shell.net/media/"
+        DATABASE_URL: "postgres://{{ blog_db_user }}:{{ blog_db_password }}@database:5433/{{ blog_db_name }}"
+        REDIS_HOST: "{{ ansible_eth1.ipv4.address }}"
+      docker_service:
+        project_name: docker_blog
+        project_src: /opt/docker/
+        recreate: always
+        restarted: true
+        files:
+          - compose-blog.yml
+      tags:
+        - docker
+        - docker_run_containers
+        - docker_blog_containers_start
+        - deploy_blog
+        - docker_compose
+    - name: 'installs nginx-extras from apt'
+      apt:
+        name: 'nginx-extras'
+        state: 'installed'
+        default_release: jessie-backports
+      tags:
+        - nginx
+        - apt_packages
+        - nginx_install
+    - name: 'copies bash-shell.net nginx config to server'
+      copy:
+        src: './nginx/sites-available/bash-shell.net'
+        dest: '/etc/nginx/sites-available/bash-shell.net'
+        owner: root
+        group: root
+        mode: 0644
+      tags:
+        - nginx
+        - nginx_config
+        - nginx_bash_shell_net
+    - name: 'create bash-shell.net in sites-enabled'
+      file:
+        src: '/etc/nginx/sites-available/bash-shell.net'
+        dest: '/etc/nginx/sites-enabled/001-bash-shell.net'
+        state: link
+        owner: root
+        group: root
+      notify:
+        - reload nginx
+      tags:
+        - nginx
+        - nginx_config
+        - nginx_bash_shell_net
+    - name: 'copies flagon.co nginx config to server'
+      copy:
+        src: './nginx/sites-available/flagon.co'
+        dest: '/etc/nginx/sites-available/flagon.co'
+        owner: root
+        group: root
+        mode: 0644
+      tags:
+        - nginx
+        - nginx_config
+        - nginx_flagon_co
+    - name: 'create flagon.co in sites-enabled'
+      file:
+        src: '/etc/nginx/sites-available/flagon.co'
+        dest: '/etc/nginx/sites-enabled/002-flagon.co'
+        state: link
+        owner: root
+        group: root
+      notify:
+        - reload nginx
+      tags:
+        - nginx
+        - nginx_config
+        - nginx_flagon_co
+    - name: 'ensure nginx is started'
+      service:
+        name: 'nginx'
+        state: started
+        enabled: yes
+    - name: 'set shell environment for certbot cron'
+      cron:
+        name: SHELL
+        env: yes
+        value: /bin/sh
+        user: root
+        cron_file: certbot
+        state: present
+      tags:
+        - certbot
+        - letsencrypt
+        - nginx
+    - name: 'set path environment for certbot cron'
+      cron:
+        name: PATH
+        env: yes
+        value: '/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin'
+        user: root
+        cron_file: certbot
+        state: present
+      tags:
+        - certbot
+        - letsencrypt
+        - nginx
+    - name: 'ensure certbot letsencrypt renew cron job'
+      cron:
+        name: "certbot update"
+        minute: "0"
+        hour: "*/12"
+        user: root
+        job: "test -x /usr/bin/certbot -a \\! -d /run/systemd/system && perl -e 'sleep int(rand(3600))' && certbot -q renew && systemctl reload nginx"
+        cron_file: certbot
+        state: present
+      tags:
+        - certbot
+        - letsencrypt
+        - nginx
   handlers:
-      - name: start docker
-        service: name=docker state=started
-      - name: reload nginx
-        service: name=nginx state=reloaded
+    - name: start docker
+      service: name=docker state=started
+    - name: reload nginx
+      service: name=nginx state=reloaded
 
-    # todo, postgres, create users, letsencrypt, openvpn
+  # todo, create users, openvpn
 
-    #   - name: install nginx from apt
-    #     apt:
-    #         name: nginx
-    #         state: installed
-    #   - name: copy bs-net config
-    #     template:
-    #         src: nginx/sites-available/bash-shell.net
-    #         dest: /etc/nginx/sites-available/bash-shell.net
+  #   - name: install nginx from apt
+  #     apt:
+  #         name: nginx
+  #         state: installed
+  #   - name: copy bs-net config
+  #     template:
+  #         src: nginx/sites-available/bash-shell.net
+  #         dest: /etc/nginx/sites-available/bash-shell.net
