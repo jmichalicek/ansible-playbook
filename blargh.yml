@@ -273,18 +273,40 @@
       file:
         path: /opt/docker
         state: directory
-    - name: copies docker compose configs
+      tags:
+        - configure_stats_stack
+        - deploy_stats
+        - configure_blog_stack
+        - deploy_blog_stack
+    - name: creates docker compose stats config dir
+      file:
+        path: /opt/docker/stats
+        state: directory
+      tags:
+        - configure_stats_stack
+        - deploy_stats
+    - name: copies docker compose stats configs
       # it's unclear in the docs, but you need to copy compose.yml files, etc
       # to the server first
       # TODO: copy the configs for each stack separately for easier single stack updates
       copy:
-        src: ./docker/
-        dest: /opt/docker
+        src: ./docker/stats/
+        dest: /opt/docker/stats
       tags:
         - docker
-        - docker_compose
-        - docker_compose_mkdirs
-        - docker_compose_copy
+        - configure_stats_stack
+        - deploy_stats
+    - name: copies docker compose stats yml
+      # TODO: if stored configs are separated out into their stacks
+      # including the yml files, then the whole stats dir copy
+      # could just include this yml, saving one step
+      copy:
+        src: ./docker/compose-stats.yml
+        dest: /opt/docker/compose-stats.yml
+      tags:
+        - docker
+        - configure_stats_stack
+        - deploy_stats
     - name: pull grafana image
       docker_image:
         name: "grafana/grafana"
@@ -339,6 +361,17 @@
         - docker_stats_containers_start
         - deploy_stats
         - docker_compose
+    - name: copies docker compose blog configs
+      # it's unclear in the docs, but you need to copy compose.yml files, etc
+      # to the server first
+      # TODO: copy the configs for each stack separately for easier single stack updates
+      copy:
+        src: ./docker/compose-blog.yml
+        dest: /opt/docker/compose-blog.yml
+      tags:
+        - docker
+        - configure_blog_stack
+        - deploy_blog
     - name: starts blog compose stack
       # TODO: Make compose-blog.yml a jinja2 template and set the deployed version there.
       environment:
@@ -358,10 +391,7 @@
           - compose-blog.yml
       tags:
         - docker
-        - docker_run_containers
-        - docker_blog_containers_start
         - deploy_blog
-        - docker_compose
     - name: 'installs nginx-extras from apt'
       apt:
         name: 'nginx-extras'
